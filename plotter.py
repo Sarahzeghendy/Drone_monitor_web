@@ -228,4 +228,5 @@ def update_output(contents, selected_metric, threshold):
     return generate_log_info(), fig
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 8050))
+    app.run(host="0.0.0.0", port=port)
