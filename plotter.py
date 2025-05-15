@@ -5,6 +5,7 @@ from dash import dcc, html, Input, Output
 from datetime import datetime
 import base64
 import io
+import os
 
 app = dash.Dash(__name__)
 app.title = "Drone Monitor"
