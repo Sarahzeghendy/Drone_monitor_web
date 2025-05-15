@@ -206,17 +206,23 @@ def update_output(contents, selected_metric, threshold):
             tickmode='array',
             tickvals=[3, 4, 5, 6],
             ticktext=['DGPS', '3D', 'RTK', 'RTK+'],
-            dtick=1
+            dtick=1,
+            automargin=True,
+            constrain='range'
         )
     else:
-        yaxis_config = dict()
+        yaxis_config = dict(
+            automargin=True,
+            constrain='range'
+        )
+
 
     fig.update_layout(
         title=titles[selected_metric],
         xaxis_title='Time (s)',
         yaxis_title=titles[selected_metric],
         template='plotly_white',
-        height=600,
+        height=900,
         margin=dict(t=80, b=80),
         yaxis=yaxis_config
     )
