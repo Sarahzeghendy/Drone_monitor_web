@@ -182,7 +182,7 @@ def update_output(contents, selected_metric, threshold):
             display_drone = any(v is not None and v > threshold for v in y_values)
         elif selected_metric == 'gps_statuses':
             display_drone = any(v != 6 for v in y_values)
-        elif selected_metric == 'rssi_sik'::
+        elif selected_metric == 'rssi_sik':
             display_drone = any(v is not None and v > threshold and 0 <= v <= 100 for v in data['rssis'])
 
 
