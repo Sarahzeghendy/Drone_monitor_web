@@ -98,12 +98,14 @@ app.layout = html.Div([
     dcc.RadioItems(
         id='metric-selector',
         options=[
+            {'label': 'RSSI SiK (%)', 'value': 'rssi_sik'},
             {'label': 'GPS Status', 'value': 'gps_statuses'},
             {'label': 'Battery', 'value': 'batteries'},
             {'label': 'RSSI', 'value': 'rssis'},
             {'label': 'Horizontal Drift', 'value': 'driftHs'},
             {'label': 'Vertical Drift', 'value': 'driftVs'}
         ],
+
         value='gps_statuses',
         inline=True,
         labelStyle={'margin-right': '20px'},
@@ -137,6 +139,9 @@ def update_threshold_label(metric):
         return {'textAlign': 'center', 'marginBottom': '20px'}, "Show drones with battery lower than:"
     elif metric == 'rssis':
         return {'textAlign': 'center', 'marginBottom': '20px'}, "Show drones with RSSI higher than:"
+    elif metric == 'rssi_sik':
+        return {'textAlign': 'center', 'marginBottom': '20px'}, "Show drones with RSSI SiK above:"
+
     else:  # gps_statuses
         return {'display': 'none'}, ""
 
@@ -177,6 +182,9 @@ def update_output(contents, selected_metric, threshold):
             display_drone = any(v is not None and v > threshold for v in y_values)
         elif selected_metric == 'gps_statuses':
             display_drone = any(v != 6 for v in y_values)
+        elif selected_metric == 'rssi_sik'::
+            display_drone = any(v is not None and v > threshold and 0 <= v <= 100 for v in data['rssis'])
+
 
         if not display_drone:
             continue
@@ -198,9 +206,11 @@ def update_output(contents, selected_metric, threshold):
         'gps_statuses': 'GPS Status',
         'batteries': 'Battery (dV)',
         'rssis': 'RSSI',
+        'rssi_sik': 'RSSI SiK (%)',
         'driftHs': 'Horizontal Drift (m)',
         'driftVs': 'Vertical Drift (m)'
     }
+
     if selected_metric == 'gps_statuses':
         yaxis_config = dict(
             tickmode='array',
