@@ -152,7 +152,7 @@ def update_output(contents, selected_metric, threshold):
 
     parse_uploaded_file(contents)
     if not drones_data:
-        return "No data found."
+        return dcc.Graph(figure=go.Figure())
 
     min_timestamp = min(ts for data in drones_data.values() for ts in data['timestamps'])
 
@@ -163,9 +163,6 @@ def update_output(contents, selected_metric, threshold):
             for ts, code in data.get('fc_errors', []):
                 if code in ERROR_CODES:
                     error_groups[code].append((drone_id, ts))
-
-        if not error_groups:
-            return "No critical errors found."
 
         graphs = []
         for code, entries in sorted(error_groups.items()):
@@ -192,7 +189,8 @@ def update_output(contents, selected_metric, threshold):
                 yaxis_title="",
                 template='plotly_white',
                 height=400,
-                margin=dict(t=60, b=40)
+                margin=dict(t=60, b=40),
+                yaxis=dict(range=[-1, None])
             )
 
             graphs.append(html.Div([
@@ -200,14 +198,14 @@ def update_output(contents, selected_metric, threshold):
                 html.P(f"Drones affected: {' '.join(sorted(affected_drones))}", style={"textAlign": "center", "fontWeight": "bold"})
             ]))
 
-        return graphs
+        return graphs if graphs else dcc.Graph(figure=go.Figure())
 
     else:
         fig = go.Figure()
         metric_label = {
             'gps_statuses': 'GPS Status',
             'batteries': 'Battery (dV)',
-            'rssis': 'RSSI',
+            'rssis': 'RSSI SiK (%)',
             'driftHs': 'Horizontal Drift (m)',
             'driftVs': 'Vertical Drift (m)'
         }[selected_metric]
@@ -246,6 +244,9 @@ def update_output(contents, selected_metric, threshold):
             automargin=True
         ) if selected_metric == 'gps_statuses' else dict(automargin=True)
 
+        if selected_metric == 'rssis':
+            yaxis_config.update(range=[0, 100])
+
         fig.update_layout(
             title=metric_label,
             xaxis_title='Time (s)',
@@ -255,9 +256,6 @@ def update_output(contents, selected_metric, threshold):
             margin=dict(t=80, b=60),
             yaxis=yaxis_config
         )
-
-        if drones_displayed == 0:
-            return html.Div("No drones match the selected criteria.", style={"textAlign": "center", "marginTop": "20px"})
 
         return dcc.Graph(figure=fig)
 
