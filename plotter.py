@@ -183,16 +183,20 @@ def update_output(contents, selected_metric, threshold):
                 ))
                 affected_drones.add(drone_id)
 
-            fig.update_layout(
-                title=f"Error: {error_name} (code {code})",
-                xaxis=dict(range=[0, None]),
-                xaxis_title="Time (s)",
-                yaxis_title="",
-                template='plotly_white',
-                height=400,
-                margin=dict(t=60, b=40),
-                yaxis=dict(range=[0, None])
-            )
+                fig.update_layout(
+                    title=f"Error: {error_name} (code {code})",
+                    xaxis=dict(
+                        title="Time (s)",
+                        range=[0, None]
+                    ),
+                    yaxis=dict(
+                        range=[0, None]
+                    ),
+                    template='plotly_white',
+                    height=400,
+                    margin=dict(t=60, b=40)
+                )
+
 
             graphs.append(html.Div([
                 dcc.Graph(figure=fig),
@@ -274,7 +278,7 @@ Total log duration: {total_duration_seconds:.2f} seconds"""
 
             return html.Div([
                 dcc.Graph(figure=fig),
-                html.Pre(summary, style={'whiteSpace': 'pre-wrap', 'textAlign': 'center'})
+                html.Pre(summary, style={'whiteSpace': 'pre-wrap'})
             ])
 
         return dcc.Graph(figure=fig)
