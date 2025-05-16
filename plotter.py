@@ -186,7 +186,6 @@ def update_output(contents, selected_metric, threshold):
             fig.update_layout(
                 title=f"Error: {error_name} (code {code})",
                 xaxis=dict(range=[0, None]),
-                xaxis=dict(range=[0, None]),
                 xaxis_title="Time (s)",
                 yaxis_title="",
                 template='plotly_white',
