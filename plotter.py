@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, State
 import plotly.graph_objects as go
 from datetime import datetime
 import base64
@@ -116,15 +116,37 @@ app.layout = html.Div([
         style={'textAlign': 'center'}
     ),
 
+    html.Div(id='threshold-label', style={'textAlign': 'center', 'marginTop': '10px', 'fontWeight': 'bold'}),
+    html.Div(
+        dcc.Input(id='threshold-input', type='number', value=0, step=0.1),
+        style={'textAlign': 'center', 'marginBottom': '20px'}
+    ),
+
     html.Div(id='main-output')
 ])
 
 @app.callback(
-    Output('main-output', 'children'),
-    Input('upload-data', 'contents'),
+    Output('threshold-label', 'children'),
+    Output('threshold-input', 'style'),
     Input('metric-selector', 'value')
 )
-def update_output(contents, selected_metric):
+def update_threshold_visibility(metric):
+    if metric in ['driftHs', 'driftVs']:
+        return "Show drones with drift higher than:", {'textAlign': 'center', 'marginBottom': '10px'}
+    elif metric == 'batteries':
+        return "Show drones with battery lower than:", {'textAlign': 'center', 'marginBottom': '10px'}
+    elif metric == 'rssis':
+        return "Show drones with RSSI higher than:", {'textAlign': 'center', 'marginBottom': '10px'}
+    else:
+        return "", {'display': 'none'}
+
+@app.callback(
+    Output('main-output', 'children'),
+    Input('upload-data', 'contents'),
+    Input('metric-selector', 'value'),
+    Input('threshold-input', 'value')
+)
+def update_output(contents, selected_metric, threshold):
     if not contents:
         return "Please upload a valid TXT file."
 
@@ -190,8 +212,24 @@ def update_output(contents, selected_metric):
             'driftVs': 'Vertical Drift (m)'
         }[selected_metric]
 
+        drones_displayed = 0
+
         for drone_id, data in sorted(drones_data.items()):
             y_values = data[selected_metric]
+            show_drone = True
+
+            if selected_metric in ['driftHs', 'driftVs']:
+                show_drone = any(v is not None and v > threshold for v in y_values)
+            elif selected_metric == 'batteries':
+                show_drone = any(v is not None and v < threshold for v in y_values)
+            elif selected_metric == 'rssis':
+                show_drone = any(v is not None and v > threshold for v in y_values)
+            elif selected_metric == 'gps_statuses':
+                show_drone = any(v != y_values[0] for v in y_values)
+
+            if not show_drone:
+                continue
+
             relative_timestamps = [(ts - min_timestamp) / 1000.0 for ts in data['timestamps']]
             fig.add_trace(go.Scatter(
                 x=relative_timestamps,
@@ -199,6 +237,7 @@ def update_output(contents, selected_metric):
                 mode='lines+markers',
                 name=f'Drone {drone_id}'
             ))
+            drones_displayed += 1
 
         yaxis_config = dict(
             tickmode='array',
@@ -212,10 +251,13 @@ def update_output(contents, selected_metric):
             xaxis_title='Time (s)',
             yaxis_title=metric_label,
             template='plotly_white',
-            height=700,
+            height=900,
             margin=dict(t=80, b=60),
             yaxis=yaxis_config
         )
+
+        if drones_displayed == 0:
+            return html.Div("No drones match the selected criteria.", style={"textAlign": "center", "marginTop": "20px"})
 
         return dcc.Graph(figure=fig)
 
