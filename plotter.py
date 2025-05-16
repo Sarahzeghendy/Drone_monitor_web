@@ -6,11 +6,22 @@ from datetime import datetime
 import base64
 import io
 import os
+from collections import defaultdict
 
 app = dash.Dash(__name__)
 app.title = "Drone Monitor"
 
 drones_data = {}
+
+ERROR_CODES = {
+    128: "COMM T/O", 129: "ACK T/O", 130: "PROTO", 131: "PREARM", 132: "RC LOST",
+    133: "NO GPS", 139: "WIND", 140: "PAYLOAD", 141: "PROXIMITY", 188: "SIMERR",
+    189: "CONTROL", 190: "SENSOR", 191: "ERROR", 192: "COMPAT",
+    193: "MAG", 194: "GYRO", 195: "ACC", 196: "BARO", 197: "GPS",
+    198: "MOTOR", 199: "LOWBAT", 200: "HOME", 201: "FENCE",
+    202: "CLK", 203: "EXTCLK", 204: "NO HW", 205: "INITFAIL",
+    206: "COMMFAIL", 207: "CRASH", 255: "FATAL"
+}
 
 def parse_uploaded_file(contents):
     global drones_data
@@ -27,24 +38,28 @@ def parse_uploaded_file(contents):
             entries = data[1:-1].split('//')
 
             timestamps, gps_statuses, batteries, rssis, driftHs, driftVs = [], [], [], [], [], []
+            fc_errors = []
 
             for entry in entries:
                 parts = entry.split(',')
                 timestamp = int(parts[0])
                 gps_status = float(parts[1].strip().replace('gps=', ''))
-                battery = rssi = driftH = driftV = None
+                battery = rssi = driftH = driftV = fc_error = None
 
                 for part in parts[2:]:
-                    key, value = part.split('=')
-                    value = value.strip()
-                    if key == 'battery':
-                        battery = float(value)
-                    elif key == 'rssi':
-                        rssi = float(value) if value != 'None' else None
-                    elif key == 'driftH':
-                        driftH = float(value)
-                    elif key == 'driftV':
-                        driftV = float(value)
+                    if '=' in part:
+                        key, value = part.split('=')
+                        value = value.strip()
+                        if key == 'battery':
+                            battery = float(value)
+                        elif key == 'rssi':
+                            rssi = float(value) if value != 'None' else None
+                        elif key == 'driftH':
+                            driftH = float(value)
+                        elif key == 'driftV':
+                            driftV = float(value)
+                        elif key == 'fc_error':
+                            fc_error = int(value)
 
                 timestamps.append(timestamp)
                 gps_statuses.append(gps_status)
@@ -52,6 +67,8 @@ def parse_uploaded_file(contents):
                 rssis.append(rssi)
                 driftHs.append(driftH)
                 driftVs.append(driftV)
+                if fc_error:
+                    fc_errors.append((timestamp, fc_error))
 
             drones_data[drone_id] = {
                 'timestamps': timestamps,
@@ -59,7 +76,8 @@ def parse_uploaded_file(contents):
                 'batteries': batteries,
                 'rssis': rssis,
                 'driftHs': driftHs,
-                'driftVs': driftVs
+                'driftVs': driftVs,
+                'fc_errors': fc_errors
             }
 
 def generate_log_info():
@@ -69,8 +87,7 @@ def generate_log_info():
     all_timestamps = [ts for data in drones_data.values() for ts in data['timestamps']]
     total_duration_seconds = (max(all_timestamps) - min(all_timestamps)) / 1000 if all_timestamps else 0
 
-    return f"""Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Total number of drones: {total_drones}
+    return f"""Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nTotal number of drones: {total_drones}
 Drones with GPS_STATUS different from 6: {num_non_six_drones}
 IDs of such drones: {', '.join(non_six_drones_ids)}
 Total log duration: {total_duration_seconds:.2f} seconds"""
@@ -103,9 +120,9 @@ app.layout = html.Div([
             {'label': 'Battery', 'value': 'batteries'},
             {'label': 'RSSI', 'value': 'rssis'},
             {'label': 'Horizontal Drift', 'value': 'driftHs'},
-            {'label': 'Vertical Drift', 'value': 'driftVs'}
+            {'label': 'Vertical Drift', 'value': 'driftVs'},
+            {'label': 'FC Errors', 'value': 'fc_errors'}
         ],
-
         value='gps_statuses',
         inline=True,
         labelStyle={'margin-right': '20px'},
@@ -127,6 +144,7 @@ app.layout = html.Div([
     dcc.Graph(id='drones-graph'),
     html.Pre(id='log-info', style={'whiteSpace': 'pre-wrap', 'marginTop': '20px', 'padding': '10px'})
 ])
+
 @app.callback(
     Output('threshold-container', 'style'),
     Output('threshold-label', 'children'),
@@ -141,8 +159,7 @@ def update_threshold_label(metric):
         return {'textAlign': 'center', 'marginBottom': '20px'}, "Show drones with RSSI higher than:"
     elif metric == 'rssi_sik':
         return {'textAlign': 'center', 'marginBottom': '20px'}, "Show drones with RSSI SiK above:"
-
-    else:  # gps_statuses
+    else:
         return {'display': 'none'}, ""
 
 @app.callback(
@@ -162,45 +179,42 @@ def update_output(contents, selected_metric, threshold):
 
     fig = go.Figure()
     drones_displayed = 0
-    # Trouver le timestamp de début (le plus petit)
-    min_timestamp = min(ts for data in drones_data.values() for ts in data['timestamps'])
+    all_timestamps = [ts for data in drones_data.values() for ts in data['timestamps']]
+    min_timestamp = min(all_timestamps) if all_timestamps else 0
 
-    for drone_id, data in sorted(drones_data.items()):
-        y_values = data[selected_metric]
+    if selected_metric == 'fc_errors':
+        error_summary = defaultdict(set)
 
-        if selected_metric == 'gps_statuses':
-            if all(val == y_values[0] for val in y_values):
-                continue
+        for drone_id, data in sorted(drones_data.items()):
+            for ts, code in data.get('fc_errors', []):
+                if code not in ERROR_CODES:
+                    continue
+                error_name = ERROR_CODES[code]
+                error_summary[error_name].add(drone_id)
+                relative_time = (ts - min_timestamp) / 1000.0
+                fig.add_trace(go.Scatter(
+                    x=[relative_time],
+                    y=[error_name],
+                    mode='markers+text',
+                    name=f'Drone {drone_id}',
+                    text=[f'Drone {drone_id}'],
+                    textposition='top center',
+                    marker=dict(size=10, symbol='x')
+                ))
+                drones_displayed += 1
 
-        # Appliquer la logique de filtrage propre à chaque métrique
-        display_drone = True
-        if selected_metric in ['driftHs', 'driftVs']:
-            display_drone = any(v is not None and v > threshold for v in y_values)
-        elif selected_metric == 'batteries':
-            display_drone = any(v is not None and v < threshold for v in y_values)
-        elif selected_metric == 'rssis':
-            display_drone = any(v is not None and v > threshold for v in y_values)
-        elif selected_metric == 'gps_statuses':
-            display_drone = any(v != 6 for v in y_values)
-        elif selected_metric == 'rssi_sik':
-            display_drone = any(v is not None and v > threshold and 0 <= v <= 100 for v in data['rssis'])
+        summary_lines = [f"{err}: {' '.join(sorted(ids))}" for err, ids in error_summary.items()]
+        summary_text = "\n".join(summary_lines) if summary_lines else "No critical errors found."
 
-
-        if not display_drone:
-            continue
-
-
-        # Recaler le temps à partir de zéro
-        relative_timestamps = [(ts - min_timestamp) / 1000.0 for ts in data['timestamps']]
-
-        fig.add_trace(go.Scatter(
-            x=relative_timestamps,
-            y=y_values,
-            mode='lines+markers',
-            name=f'Drone {drone_id}'
-        ))
-        drones_displayed += 1
-
+        fig.update_layout(
+            title="Flight Controller Errors",
+            xaxis_title="Time (s)",
+            yaxis_title="Error Type",
+            template='plotly_white',
+            height=900,
+            margin=dict(t=80, b=80)
+        )
+        return summary_text, fig
 
     titles = {
         'gps_statuses': 'GPS Status',
@@ -211,21 +225,44 @@ def update_output(contents, selected_metric, threshold):
         'driftVs': 'Vertical Drift (m)'
     }
 
-    if selected_metric == 'gps_statuses':
-        yaxis_config = dict(
-            tickmode='array',
-            tickvals=[3, 4, 5, 6],
-            ticktext=['DGPS', '3D', 'RTK', 'RTK+'],
-            dtick=1,
-            automargin=True,
-            constrain='range'
-        )
-    else:
-        yaxis_config = dict(
-            automargin=True,
-            constrain='range'
-        )
+    for drone_id, data in sorted(drones_data.items()):
+        y_values = data[selected_metric]
+        display_drone = True
 
+        if selected_metric in ['driftHs', 'driftVs']:
+            display_drone = any(v is not None and v > threshold for v in y_values)
+        elif selected_metric == 'batteries':
+            display_drone = any(v is not None and v < threshold for v in y_values)
+        elif selected_metric == 'rssis':
+            display_drone = any(v is not None and v > threshold for v in y_values)
+        elif selected_metric == 'gps_statuses':
+            if all(val == y_values[0] for val in y_values):
+                continue
+            display_drone = any(v != 6 for v in y_values)
+        elif selected_metric == 'rssi_sik':
+            display_drone = any(v is not None and v > threshold and 0 <= v <= 100 for v in data['rssis'])
+
+        if not display_drone:
+            continue
+
+        relative_timestamps = [(ts - min_timestamp) / 1000.0 for ts in data['timestamps']]
+
+        fig.add_trace(go.Scatter(
+            x=relative_timestamps,
+            y=y_values,
+            mode='lines+markers',
+            name=f'Drone {drone_id}'
+        ))
+        drones_displayed += 1
+
+    yaxis_config = dict(
+        tickmode='array',
+        tickvals=[3, 4, 5, 6],
+        ticktext=['DGPS', '3D', 'RTK', 'RTK+'],
+        dtick=1,
+        automargin=True,
+        constrain='range'
+    ) if selected_metric == 'gps_statuses' else dict(automargin=True, constrain='range')
 
     fig.update_layout(
         title=titles[selected_metric],
@@ -236,8 +273,6 @@ def update_output(contents, selected_metric, threshold):
         margin=dict(t=80, b=80),
         yaxis=yaxis_config
     )
-
-
 
     if drones_displayed == 0 and selected_metric in ['driftHs', 'driftVs']:
         return f"No drones exceed the threshold of {threshold} m in {titles[selected_metric]}.", fig
