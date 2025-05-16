@@ -186,6 +186,7 @@ def update_output(contents, selected_metric, threshold):
             fig.update_layout(
                 title=f"Error: {error_name} (code {code})",
                 xaxis=dict(range=[0, None]),
+                xaxis=dict(range=[0, None]),
                 xaxis_title="Time (s)",
                 yaxis_title="",
                 template='plotly_white',
@@ -266,11 +267,11 @@ def update_output(contents, selected_metric, threshold):
             all_timestamps = [ts for data in drones_data.values() for ts in data['timestamps']]
             total_duration_seconds = (max(all_timestamps) - min(all_timestamps)) / 1000 if all_timestamps else 0
 
-            summary = f"""Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n" \
-                      f"Total number of drones: {total_drones}\n" \
-                      f"Drones with GPS_STATUS different from 6: {num_non_six_drones}\n" \
-                      f"IDs of such drones: {', '.join(non_six_drones_ids)}\n" \
-                      f"Total log duration: {total_duration_seconds:.2f} seconds"""
+            summary = f"""Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Total number of drones: {total_drones}
+Drones with GPS_STATUS different from 6: {num_non_six_drones}
+IDs of such drones: {', '.join(non_six_drones_ids)}
+Total log duration: {total_duration_seconds:.2f} seconds"""
 
             return html.Div([
                 dcc.Graph(figure=fig),
