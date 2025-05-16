@@ -80,6 +80,7 @@ def parse_uploaded_file(contents):
                 'fc_errors': fc_errors
             }
 
+
 def generate_log_info():
     total_drones = len(drones_data)
     non_six_drones_ids = [drone_id for drone_id, data in drones_data.items() if any(status != 6 for status in data['gps_statuses'])]
