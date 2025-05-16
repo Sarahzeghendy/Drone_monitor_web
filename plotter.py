@@ -185,12 +185,13 @@ def update_output(contents, selected_metric, threshold):
 
             fig.update_layout(
                 title=f"Error: {error_name} (code {code})",
+                xaxis=dict(range=[0, None]),
                 xaxis_title="Time (s)",
                 yaxis_title="",
                 template='plotly_white',
                 height=400,
                 margin=dict(t=60, b=40),
-                yaxis=dict(range=[-1, None])
+                yaxis=dict(range=[0, None])
             )
 
             graphs.append(html.Div([
@@ -241,7 +242,8 @@ def update_output(contents, selected_metric, threshold):
             tickmode='array',
             tickvals=[3, 4, 5, 6],
             ticktext=['DGPS', '3D', 'RTK', 'RTK+'],
-            automargin=True
+            automargin=True,
+            range=[2.5, 6.5]
         ) if selected_metric == 'gps_statuses' else dict(automargin=True)
 
         if selected_metric == 'rssis':
@@ -256,6 +258,24 @@ def update_output(contents, selected_metric, threshold):
             margin=dict(t=80, b=60),
             yaxis=yaxis_config
         )
+
+        if selected_metric == 'gps_statuses':
+            total_drones = len(drones_data)
+            non_six_drones_ids = [drone_id for drone_id, data in drones_data.items() if any(status != 6 for status in data['gps_statuses'])]
+            num_non_six_drones = len(non_six_drones_ids)
+            all_timestamps = [ts for data in drones_data.values() for ts in data['timestamps']]
+            total_duration_seconds = (max(all_timestamps) - min(all_timestamps)) / 1000 if all_timestamps else 0
+
+            summary = f"""Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n" \
+                      f"Total number of drones: {total_drones}\n" \
+                      f"Drones with GPS_STATUS different from 6: {num_non_six_drones}\n" \
+                      f"IDs of such drones: {', '.join(non_six_drones_ids)}\n" \
+                      f"Total log duration: {total_duration_seconds:.2f} seconds"""
+
+            return html.Div([
+                dcc.Graph(figure=fig),
+                html.Pre(summary, style={'whiteSpace': 'pre-wrap', 'textAlign': 'center'})
+            ])
 
         return dcc.Graph(figure=fig)
 
